@@ -1,0 +1,406 @@
+---
+title: "Text as Data: Problem Set 01"
+author: "Professor Tiago Ventura"
+execute: 
+  error: true
+format:
+  html
+editor_options: 
+  chunk_output_type: console
+theme: default
+---
+
+## Instructions
+
+To complete this homework, you have two options. 
+
+You can either complete this assignment using a **dataset of your choice**. This is a great opportunity for you to start working with a dataset that you can potentially use for your final project. 
+
+Your second option is to this dataset of social media posts from political candidates running for Congress during the 2022 U.S. Midterm election. 
+
+You can download the dataset [here](https://www.dropbox.com/scl/fi/jz14130dlzj5xvca9txj4/midterm_candidates_labeled_all_May05.csv?rlkey=b0m1h6kk1af3uz9tjqyelthh3&dl=0)
+
+To know more about the dataset, read and cite this paper: <https://journals.sagepub.com/doi/full/10.1177/20563051251337541>
+
+If you want say thanks to the people who collected and shared this data with us for this class, please send a email to my colleague [Maggie MacDonald](https://maggiegmacdonald.com/)
+
+**IMPORTANT:** Remember to NOT commit your data to github. Github does not allow you to push large datasets to remote repositories. If you commit your dataset, you will need to reset your commit, and that's always a bit of work. In addition, remember that your notebook should be compiled with the results of the code blocks.
+
+## Question 1 
+
+Take a small a sample of your documents and read them carefully. This sample doesn't need to be random. Select cases that are more interesting, and close to your theoretical interest in this dataset. What are you thoughts about these documents? What did you learn after reading them?
+```{r}
+# loading packages
+pacman::p_load(tidyverse,
+               ggplot2,
+               quanteda,
+               tidytext,quanteda.corpora, quanteda.textstats)
+
+# read the downloaded data file
+data <- read.csv("C:/Users/Whatsername/Desktop/TAD/PS1/midterm_candidates_labeled_all_May05.csv")
+
+#to show only 20 observations and the interesting info
+data |>
+sample_n(20) |>
+  select(text, name, platform, party_clean, office_type, office.name, gender)
+  
+```
+My answer: 
+
+1. Emoji, hashtags are widely used in these SNS posts, which takes extra steps in the pre-processing. 
+
+2. Some of the posts are not related to the mid-term election at all, while some are very much related. I wonder if there's a certain pattern here associated to their parties or office types. 
+
+3. Since many of the posts are random in content, I could observe that there are not many repetitive vocabulary. 
+
+## Question 2
+
+Tokenize your documents and pre-process them, removing any "extraneous" content you noticed in closely reading a sample of your documents. What content have you removed and why? Any pre-processing steps from what you saw in class that you consider not to use here? 
+```{r}
+# load packages
+pacman::p_load(quanteda.textstats)
+
+# convert to a corpus
+data_corpus  <- corpus(data, text_field="text")
+
+# Get main bigram tokens
+## Pre-process data, set ngram to 2, and the minimum count of bigrams to 10
+t_bigram <- tokens(data_corpus,
+       remove_punct = TRUE,
+       remove_numbers= TRUE, remove_url = TRUE, verbose = FALSE) |>
+  tokens_tolower() |>
+  tokens_remove(pattern = c(stopwords("en"), stopwords("es"))) |>
+  tokens_remove(pattern = c("\\#w+", "[\\p{Emoji_Presentation}\\p{Emoji}\\p{So}]+", "[\\p{S}]+", "@\\w+"), valuetype = "regex") |>
+  textstat_collocations(size = 2, min_count = 10) |>
+  arrange(desc(count)) |>
+## Select top 100 bigrams
+  slice(1:100)
+
+# pre-process the original corpus, using word stem
+t_clean <- tokens(data_corpus,
+       remove_punct = TRUE, 
+       remove_numbers= TRUE, remove_url = TRUE, verbose = FALSE) |>
+  tokens_tolower() |>
+  tokens_remove(pattern = c(stopwords("en"), stopwords("es"))) |>
+  tokens_remove(pattern = c("\\#w+", "[\\p{Emoji_Presentation}\\p{Emoji}\\p{So}]+", "[\\p{S}]+", "@\\w+"), valuetype = "regex") |>
+  tokens_wordstem()
+
+# Compounding the bigram token file to the original full token file
+tokens_combine <- tokens_compound(t_clean, t_bigram)
+
+# Convert the combined token file to dfm
+data_dfm <- tokens_combine |> dfm()
+
+```
+My answer: 
+
+1. Besides numbers, punctuation, and stop words in both English and Spanish, I have removed website links, hashtags, and emojis, as those are not text information and are common in SNS posts. 
+
+2. I seperately run bi-grams, as I don't see too many combining vocabulary in the sample; only including top 100 bigrams should be enough for analyzing. 
+
+3. I used word stemming to merge similar words, which I think is important in SNS posts, as many of the posts use colloquial language, and the same vocabulary can vary a lot in format. 
+
+4. I did not trim the words with extreme frequencies eventually, as SNS posts are not that repetitive in vocabulary generally, so trimming even with a very small proportion or count would remove a great number of the features. 
+
+## Question 3
+
+Using [Danny and Spirling's Pretext](https://github.com/matthewjdenny/preText), tell me which of the pre-processing steps makes a more substantive difference in the data transformation? Would you keep all these steps or would you follow the PreText recommendations? Use a sample of the data to solve this question.
+
+```{r}
+
+library(preText)
+
+# Sample only 100 documents
+corpus_100 <- data_corpus[1:100,]
+
+# Pre-processing
+preprocessed_documents <- factorial_preprocessing(
+    corpus_100,
+    use_ngrams = TRUE,
+    infrequent_term_threshold = 0.05,
+    verbose = FALSE)
+
+# perform the preText procedure
+preText_results <- preText(
+    preprocessed_documents,
+    dataset_name = "Senator SNS",
+    distance_method = "cosine",
+    num_comparisons = 50,
+    verbose = FALSE)
+
+# show the conditional effects of each preprocessing step 
+# on the mean preText score for each specification
+regression_coefficient_plot(preText_results,
+                            remove_intercept = TRUE)
+
+```
+My answer: 
+
+I will partly follow PreText's recommends. 
+
+(1) Apparently removing infrequent terms has a big impact, then I may not trim, which is on the same page with my observation in the previous parts. 
+
+(2) I will still remove punctuation regardless of the PreText results, as I could not imagine doing text analysis without removing punctuation. But I do wonder why removing punctuation would have such a big impact; maybe on SNS platforms, people are using punctuation in a different way. 
+
+## Question 4 
+
+Pick an important source of variation in your data (for example: date, author identity, location, etc.). Subset the data along this dimension, and discuss which words discriminate better each group. You can do this by using TF-IDF, PMI, log(share $word_i$ in group a/share $word_i$ in b), or create a measure similar to Ban's article.
+
+```{r}
+
+# group by party
+dfm_grouped <- dfm_group(data_dfm, party_clean)
+print(dfm_grouped)
+
+# calculate each word share per party
+dfm_share <- (dfm_grouped + 1) / (rowSums(dfm_grouped) + nfeat(dfm_grouped))
+
+# calculate the log ratio. If log_ratio > 0, word more characteristic of Democratic
+row1 <- as.numeric(dfm_share[1, ])
+row2 <- as.numeric(dfm_share[2, ])
+log_ratio <- log(row1 / row2)
+
+# Convert the ratio number to a dataframe so we can see the top discriminate words for each party
+## Positive ratio: Democratic related
+## Negative ratio: Republican related 
+log_ratio_df <- data.frame(
+  word = featnames(dfm_grouped),
+  log_ratio = log_ratio)
+arrange(log_ratio_df, desc(log_ratio)) |>
+  slice(1:20)
+arrange(log_ratio_df, log_ratio) |>
+  slice(1:20)
+
+```
+My answer: 
+
+I want to check the word discrimination by the 2 parties, and I'm using the log ratio approach 
+
+1. The top discriminate words for Democratic party are name words like banyai, angelica etc. I searched among the original texts, turned out there are a few Democratic senators love to mention their own names in their posts, like "Vote for Banyai!". Democratic senators are also in general very pro voting; we can see this from frequent mentioning in top words like "iwillvote.com". Left-wing advocacies are among the top words as well, like abortion related "anti-choice", and democracy related "people-powered". 
+
+2. The top discriminate words for Republican party also include name words like "scotti". Since during this election, Democratic party is the ruling party, many posts from the Replican party are finger pointing towards them, like the inflation/pricing is "out-of-control", or accusing opponents being "far-left". 
+
+## Question 5
+
+Create a dictionary (or use a pre-existing dictionary) to measure a topic of interest in your data. It can be anything, sentiment, tone, misinformation, any topic of interest. Label your documents, and visualize the prevalence of your classes. 
+```{r}
+
+# load dictionary related packages
+pacman::p_load("quanteda.dictionaries", "quanteda.sentiment")
+
+# load a dictionary
+data(data_dictionary_LSD2015)
+
+# apply the dictionary to the dfm, calculating sentiment scores
+lsd_results <- data_dfm |>
+  textstat_polarity(dictionary = data_dictionary_LSD2015)
+
+# get vars back
+df_sent <- docvars(data_dfm) %>%
+  mutate(doc_id = docnames(data_dfm)) %>%
+  left_join(lsd_results)
+
+# label each document per sentiment scores
+df_sent <- 
+  mutate(df_sent, sentiment_class = case_when(
+    sentiment > 0 ~ "Positive",
+    sentiment < 0 ~ "Negative",
+    sentiment == 0 ~ "Neutral"
+  ))
+
+# visualize each class
+  ggplot(df_sent, aes(x = sentiment_class, fill = sentiment_class)) +
+  geom_bar() +
+  labs(title = "Prevalence of Sentiment Classes",
+       x = "Sentiment", y = "Number of Documents") + 
+  theme_minimal()
+
+```
+
+## Question 6
+
+Pick some documents (at least 10 for each class) that are exemplar (high probability) of being for each class of your dictionary. Read these documents.  Now let's try to augment a little your classifier.
+```{r}
+
+# top 10 positive
+top_positive <- df_sent %>%
+  arrange(desc(sentiment)) %>%
+  slice(1:10)
+
+# top 10 negative
+top_negative <- df_sent %>%
+  arrange(sentiment) %>%
+  slice(1:10)
+
+# get docid of the top doc for each class
+pos_ids <- top_positive$doc_id
+neg_ids <- top_negative$doc_id
+
+# subset corpus
+exemplar_pos <- corpus_subset(data_corpus, docnames(data_corpus) %in% pos_ids)
+exemplar_neg <- corpus_subset(data_corpus, docnames(data_corpus) %in% neg_ids)
+
+# view text
+## exemplar positive posts
+head(as.character(exemplar_pos))
+
+## exemplar negative posts
+head(as.character(exemplar_neg))
+
+```
+
+### Question 6.1
+
+Using cosine similarity, grab the closest 10 documents to each reference document you read before. Read those. How well does the cosine similarity work? Try with another measure of distance. Anything interesting there?
+
+# Sample from the original dfm, and trim the sample for later similarity calculating
+```{r}
+# extract doc_id of the exemplar documents as reference
+exemplar_ids <- c(docnames(exemplar_pos), docnames(exemplar_neg))
+
+# sample 5000 docs from the original dfm, excluding the exemplar docs
+set.seed(123)
+sample_ids <- setdiff(docnames(data_dfm), exemplar_ids) |>
+  sample(size = 5000)
+
+# combine sample ids and exemplar ids
+keep_ids <- c(exemplar_ids, sample_ids)
+
+# subset the dfm to only these docs
+dfm_sample <- data_dfm[keep_ids, ]
+
+# trim features to further downsize the dfm sample
+dfm_sample <- dfm_trim(
+  dfm_sample,
+  min_docfreq = 0.005,
+  max_docfreq = 0.8,
+  docfreq_type = "prop"
+) 
+
+# use tfidf for more accurate cosine similarity calculation
+dfm_tfidf <- dfm_sample %>% 
+                dfm_tfidf(scheme_tf = "prop")
+
+# do tfidf on the reference documents (used for running similarity only for these references)
+dfm_exemplars <- dfm_tfidf[exemplar_ids, ]
+```
+
+# cosine similarity
+```{r}
+## compute cosine similarity for exemplar documents as reference
+sim_exemplars <- textstat_simil(dfm_tfidf,
+                               x = dfm_tfidf,   # all docs
+                               y = dfm_exemplars,  
+                               margin = "documents",
+                               method = "cosine")
+
+## first exemplar
+ref1 <- exemplar_ids[1]
+
+# similarity of all docs to this exemplar
+sim_col1 <- sim_exemplars[, ref1]
+
+## remove self-match
+sim_col1 <- sim_col1[names(sim_col1) != ref1]
+
+## get top 10 closest docs (higher cosine value)
+top10_ref1 <- sort(sim_col1, decreasing = TRUE)[1:10]
+
+## convert to a data frame
+df_top10_ref1 <- data.frame(
+  ref_doc = ref1,
+  doc_id = names(top10_ref1),
+  similarity = as.numeric(top10_ref1)
+)
+df_top10_ref1
+
+## extract from original corpus, read the closest 10 docs using cosine similarity 
+docs_to_read <- c(df_top10_ref1$ref_doc[1], df_top10_ref1$doc_id)
+corpus_subset <- corpus_subset(data_corpus, docnames(data_corpus) %in% docs_to_read)
+as.character(corpus_subset)
+```
+My answer: 
+
+1. Before I set seed for sampling 5000 docs from the original dfm, the most similar doc to the reference doc(text5917) I used is an extremely long doc (probably the longest post in the data set), which I suppose shares a lot of common and repetitive words with itself and with the reference doc. Therefore, after standardizing, not surprisingly it is the closest with the reference word. I think this long doc might be close to many other long and positive posts as well. 
+
+2. After setting seed, the very long doc is gone. All the other similar posts do also share a similar topic on voting and Democratic campaign. I think in general, cosine similarity seem to work well. 
+
+# Another measure of distance: Euclidean distance
+```{r}
+## calculate Euclidean distance using the same sample dfm
+dist_exemplars <- textstat_dist(dfm_tfidf,
+                               x = dfm_tfidf,
+                               y = dfm_exemplars,  
+                               margin = "documents",
+                               method = "euclidean")
+
+## still using "ref1" as the reference doc, same in calculating cosine similarity
+
+## distance of all docs to this exemplar
+dist_col1 <- dist_exemplars[, ref1]        
+
+## remove self-match
+dist_col1 <- dist_col1[names(dist_col1) != ref1]
+
+## get top 10 closest docs (lower distance value)
+top10_ref1_ecld <- sort(dist_col1, decreasing = FALSE)[1:10]
+
+## convert to a data frame
+df_top10_ref1_ecld <- data.frame(
+  ref_doc = ref1,
+  doc_id = names(top10_ref1_ecld),
+  distance = as.numeric(top10_ref1_ecld)
+)
+df_top10_ref1_ecld
+
+## extract from original corpus, read the closest 10 docs using Euclidean distance 
+docs_to_read_ecld <- c(df_top10_ref1_ecld$ref_doc[1], df_top10_ref1_ecld$doc_id)
+corpus_subset_ecld <- corpus_subset(data_corpus, docnames(data_corpus) %in% docs_to_read_ecld)
+as.character(corpus_subset_ecld)
+
+```
+My answer: 
+
+1. The top results from Euclidean distance is very interesting: all of them are very brief posts with very little words, some times with only emojis. Since Euclidean distance is very sensitive to doc length, I suppose only the shortest posts are considered as the closest docs compared to the reference doc, which is relatively long. 
+
+2. Reviewing the full distance dataframe, I found out that there are many docs share the same Euclidean distance with the reference doc. I guess it could be that after pre-processing, a lot of the short posts were left with only 0-1 feature. 
+
+3. We can tell from the first two bullets that Euclidean distance is not a robust way to calculate doc similarity, especially not for SNS posts of which the doc length vary a great deal. 
+
+### Question 6.2
+
+Now, check qualitative these documents. Take a look at the top features, keyword in Context, higher TF-IDF. Would you change anything in your dictionary now that you looked in these documents?
+```{r}
+
+# Top features for the top10 positive and negative documents
+## subset for each class
+dfm_pos <- dfm_sample[pos_ids, ]
+dfm_neg <- dfm_sample[neg_ids, ]
+
+## read top features for each class
+topfeatures(dfm_pos, n = 50)
+topfeatures(dfm_neg, n = 50)
+
+# KWIC, check for the top 10 features as key words for each class
+## for positive docs
+top_pos_words <- names(topfeatures(dfm_pos, n = 10))
+data_corpus_token <- tokens(data_corpus)
+kwic(data_corpus_token[pos_ids, ], pattern = top_pos_words, window = 5)
+## for negative docs
+top_neg_words <- names(topfeatures(dfm_neg, n = 10))
+kwic(data_corpus_token[neg_ids, ], pattern = top_neg_words, window = 5)
+
+# Features with high tfidf scores
+## subset for each class
+dfm_pos_tfidf <- dfm_exemplars[pos_ids, ]
+dfm_neg_tfidf <- dfm_exemplars[neg_ids, ]
+
+## read features of higher tfidf scores
+topfeatures(dfm_pos_tfidf, n = 50)
+topfeatures(dfm_neg_tfidf, n = 50)
+
+```
+My answer:
+By reading features with the highest counts and tfidf scores, I feel there are a lot of words that made sense in the respective class. But when looking at those words in KWIC, words such as "like" "honor" actually are neutral or part of a proper noun, but have been captured as positive with dictionary. Similarly for negative docs, words like "crime", "violent" are top features, but when I check for KWIC, the original post was actually talking about lower crime rate, which should be reviewed as positive. In this regard, I will consider updating the dictionary for these frequent words to increase the accuracy of dictionary on this data set.
+
+
