@@ -377,8 +377,9 @@ Now, check qualitative these documents. Take a look at the top features, keyword
 dfm_pos <- dfm_sample[pos_ids, ]
 dfm_neg <- dfm_sample[neg_ids, ]
 
-## read top features for each class
+## read top features for positive exemplar
 topfeatures(dfm_pos, n = 50)
+## read top features for negative exemplar
 topfeatures(dfm_neg, n = 50)
 
 # KWIC, check for the top 10 features as key words for each class
@@ -395,8 +396,9 @@ kwic(data_corpus_token[neg_ids, ], pattern = top_neg_words, window = 5)
 dfm_pos_tfidf <- dfm_exemplars[pos_ids, ]
 dfm_neg_tfidf <- dfm_exemplars[neg_ids, ]
 
-## read features of higher tfidf scores
+## positive exemplar: features of higher tfidf scores
 topfeatures(dfm_pos_tfidf, n = 50)
+## negative exemplar: features of higher tfidf scores
 topfeatures(dfm_neg_tfidf, n = 50)
 
 ```
