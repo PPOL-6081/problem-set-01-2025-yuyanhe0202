@@ -63,20 +63,7 @@ pacman::p_load(quanteda.textstats)
 # convert to a corpus
 data_corpus  <- corpus(data, text_field="text")
 
-# Get main bigram tokens
-## Pre-process data, set ngram to 2, and the minimum count of bigrams to 10
-t_bigram <- tokens(data_corpus,
-       remove_punct = TRUE,
-       remove_numbers= TRUE, remove_url = TRUE, verbose = FALSE) |>
-  tokens_tolower() |>
-  tokens_remove(pattern = c(stopwords("en"), stopwords("es"))) |>
-  tokens_remove(pattern = c("\\#w+", "[\\p{Emoji_Presentation}\\p{Emoji}\\p{So}]+", "[\\p{S}]+", "@\\w+"), valuetype = "regex") |>
-  textstat_collocations(size = 2, min_count = 10) |>
-  arrange(desc(count)) |>
-## Select top 100 bigrams
-  slice(1:100)
-
-# pre-process the original corpus, using word stem
+# pre-process the corpus, using word stem
 t_clean <- tokens(data_corpus,
        remove_punct = TRUE, 
        remove_numbers= TRUE, remove_url = TRUE, verbose = FALSE) |>
@@ -85,20 +72,32 @@ t_clean <- tokens(data_corpus,
   tokens_remove(pattern = c("\\#w+", "[\\p{Emoji_Presentation}\\p{Emoji}\\p{So}]+", "[\\p{S}]+", "@\\w+"), valuetype = "regex") |>
   tokens_wordstem()
 
-# Compounding the bigram token file to the original full token file
-tokens_combine <- tokens_compound(t_clean, t_bigram)
+## Separately run for bi-gram: set ngram to 2, and the minimum count of bigrams to 10
+t_bigram <- tokens(data_corpus,
+       remove_punct = TRUE,
+       remove_numbers= TRUE, remove_url = TRUE, verbose = FALSE) |>
+  tokens_tolower() |>
+  tokens_remove(pattern = c(stopwords("en"), stopwords("es"))) |>
+  tokens_remove(pattern = c("\\#w+", "[\\p{Emoji_Presentation}\\p{Emoji}\\p{So}]+", "[\\p{S}]+", "@\\w+"), valuetype = "regex") |>
+  textstat_collocations(size = 2, min_count = 10) |>
+  arrange(desc(count)) |>
+  ## Select top 50 bigrams
+  slice(1:50)
 
-# Convert the combined token file to dfm
-data_dfm <- tokens_combine |> dfm()
+## Check top bigrams
+t_bigram
+
+# Convert processed token file to dfm
+data_dfm <- t_clean |> dfm()
 
 ```
 My answer: 
 
 1. Besides numbers, punctuation, and stop words in both English and Spanish, I have removed website links, hashtags, and emojis, as those are not text information and are common in SNS posts. 
 
-2. I seperately run bi-grams, as I don't see too many combining vocabulary in the sample; only including top 100 bigrams should be enough for analyzing. 
+2. I used word stemming to merge similar words, which I think is important in SNS posts, as many of the posts use colloquial language, and the same vocabulary can vary a lot in format. 
 
-3. I used word stemming to merge similar words, which I think is important in SNS posts, as many of the posts use colloquial language, and the same vocabulary can vary a lot in format. 
+3. I separately ran bi-grams to check the most frequent features. Basically, I feel that bi-grams are not really necessary for this data set, therefore, I decided to not keep the bi-grams so as not to complicate the dfm. 
 
 4. I did not trim the words with extreme frequencies eventually, as SNS posts are not that repetitive in vocabulary generally, so trimming even with a very small proportion or count would remove a great number of the features. 
 
@@ -259,7 +258,7 @@ Using cosine similarity, grab the closest 10 documents to each reference documen
 exemplar_ids <- c(docnames(exemplar_pos), docnames(exemplar_neg))
 
 # sample 5000 docs from the original dfm, excluding the exemplar docs
-set.seed(123)
+set.seed(22)
 sample_ids <- setdiff(docnames(data_dfm), exemplar_ids) |>
   sample(size = 5000)
 
@@ -363,7 +362,7 @@ My answer:
 
 1. The top results from Euclidean distance is very interesting: all of them are very brief posts with very little words, some times with only emojis. Since Euclidean distance is very sensitive to doc length, I suppose only the shortest posts are considered as the closest docs compared to the reference doc, which is relatively long. 
 
-2. Reviewing the full distance dataframe, I found out that there are many docs share the same Euclidean distance with the reference doc. I guess it could be that after pre-processing, a lot of the short posts were left with only 0-1 feature. 
+2. Reviewing the full distance data frame, I found out that there are many docs share the same Euclidean distance with the reference doc. I guess it could be that after pre-processing, a lot of the short posts were left with only 0-1 feature. 
 
 3. We can tell from the first two bullets that Euclidean distance is not a robust way to calculate doc similarity, especially not for SNS posts of which the doc length vary a great deal. 
 
@@ -402,7 +401,8 @@ topfeatures(dfm_pos_tfidf, n = 50)
 topfeatures(dfm_neg_tfidf, n = 50)
 
 ```
-My answer:
-By reading features with the highest counts and tfidf scores, I feel there are a lot of words that made sense in the respective class. But when looking at those words in KWIC, words such as "like" "honor" actually are neutral or part of a proper noun, but have been captured as positive with dictionary. Similarly for negative docs, words like "crime", "violent" are top features, but when I check for KWIC, the original post was actually talking about lower crime rate, which should be reviewed as positive. In this regard, I will consider updating the dictionary for these frequent words to increase the accuracy of dictionary on this data set.
+My answer: 
+
+By reading features with the highest counts and tfidf scores, I feel there are a lot of words that made sense in the respective class. But when looking at those words in KWIC, words such as "help" "honor" actually are neutral or part of a proper noun, but have been captured as positive with dictionary. Similarly for negative docs, words like "crime", "violent" are top features, but when I check for KWIC, the original post was actually talking about lower crime rate, which should be reviewed as positive. In this regard, I will consider updating the dictionary for these frequent words to increase the accuracy of dictionary on this data set.
 
 
